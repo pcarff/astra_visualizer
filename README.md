@@ -91,8 +91,29 @@ cd /anzym/my-agent/milo_visualizer
 
 ### Controls
 - **Text Input**: Type message and press `[Enter]` to dispatch to MILO.
-- **`[Right-Alt]`**: Push-To-Talk voice trigger.
-- **`[Esc]`**: Exit console.
+- **`[Right-Alt]`**: Push-To-Talk voice trigger (the key comes from backtalk's `ptt_key`).
+- **`[Ctrl+V]` / `[Shift+Insert]` / right-click**: Paste. **`[Ctrl+C]`** copy line, **`[Ctrl+U]`** clear line, **`[Ctrl+W]` / `[Ctrl+Backspace]`** delete word.
+- **`[Ctrl +/-]`, `[Ctrl+0]`**: Zoom / reset zoom.
+- **`[F1]`** or click the **M.I.L.O. nameplate**: Reference plaque (below).
+- **`[Esc]`**: Close the plaque if open, otherwise exit the console.
+
+### Reference Plaque (`ReferencePlaque`)
+A brass plaque that drops down from under the nameplate over the Nixie and
+meter bays, stopping above the input tray so typing still works. Three
+sections, switched with `[Tab]` / `[←][→]` or by clicking the tabs; scroll
+with `[↑][↓]`, `[PgUp][PgDn]` or the mouse wheel:
+
+- **KEYS**: every console key binding above, plus "Ctrl+C in the terminal hangs up".
+- **VOICE**: the voice-console phrases (spoken *or* typed), e.g. "switch brain to <name>", "go hands free", "set effort to <level>", "goodbye milo".
+- **TOOLS**: built-in tools and MILO-tools, grouped under sub-headings.
+
+The content is rebuilt on every open from the live sources, so it never needs
+hand-editing: `backtalk.json` (PTT key, mic mode, active brain shown top-right),
+`CONSOLE_VERBS` in `backtalk/backtalk/main.py` (read with `ast`, not imported),
+the `- name(args): desc` tool list in `backtalk/backtalk/brain.py`, and each
+`milo-tools/` executable with a `# milo-tool:` line in its first 5 lines (the
+same rule backtalk uses). Short explanations for voice verbs live in
+`VOICE_HELP` in `milo_nixie.py`; add one there when adding a verb.
 
 ---
 

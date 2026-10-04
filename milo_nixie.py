@@ -1,4 +1,7 @@
+import ast
+import json
 import os
+import re
 import sys
 import math
 import random
@@ -367,7 +370,7 @@ class AnalogMeter:
             surface.blit(self.face_img, (self.cx - self.radius, self.cy - self.radius))
         
         rad = math.radians(self.angle - 90)
-        r = int(self.size * 0.38)
+        r = int(self.size * 0.26)
         tx = self.cx + r * math.cos(rad)
         ty = self.cy + r * math.sin(rad)
         
@@ -431,9 +434,12 @@ def token_plate_rows(status):
     # A limit window that has already reset makes the saved % stale.
     five_pct = five.get("pct") if (five.get("resets_at") or 0) > now else None
     week_pct = week.get("pct") if (week.get("resets_at") or 0) > now else None
-    rows["claude"] = ("CLAUDE", f"5H {five_pct:.0f}%" if five_pct is not None else "5H --",
+    five_left = (100.0 - five_pct) if five_pct is not None else None
+    week_left = (100.0 - week_pct) if week_pct is not None else None
+    rows["claude"] = ("CLAUDE",
+                      f"5H {five_pct:.0f}% · {five_left:.0f}% LEFT" if five_pct is not None else "5H --",
                       _human(c.get("today_total")),
-                      (f"WK {week_pct:.0f}% · " if week_pct is not None else "") + f"7D {_human(c.get('week_total'))}",
+                      (f"WK {week_pct:.0f}% · {week_left:.0f}% LEFT · " if week_pct is not None else "") + f"7D {_human(c.get('week_total'))}",
                       five_pct)
     g = status.get("gemini", {})
     rows["gemini"] = ("GEMINI", "CLI", _human(g.get("today_total")),
@@ -494,6 +500,268 @@ class TokenPlate:
             fill.width = max(2, int(bar.width * min(pct, 100) / 100))
             color = (230, 60, 40) if pct >= 80 else AMBER_GLOW
             pygame.draw.rect(surface, color, fill, border_radius=2)
+
+
+# -----------------------------------------------------------------------------
+# Reference Plaque (F1 or click the nameplate): keys, voice commands, tools.
+# Rebuilt from backtalk's own config/source on every open, so a new milo-tool
+# or voice phrase shows up without touching this file.
+# -----------------------------------------------------------------------------
+AGENT_ROOT = os.path.dirname(BASE_DIR)
+BACKTALK_DIR = os.path.join(AGENT_ROOT, "backtalk")
+TOOLS_DIR = os.path.join(AGENT_ROOT, "milo-tools")
+
+VOICE_HELP = {
+    "clear": "Wipe the conversation and start fresh",
+    "compact": "Summarize the session to free context",
+    "deep": "Deep model for this session (slower)",
+    "fast": "Back to the fast model",
+    "brain": "local (Qwen on Cortex), claude, or agy (antigravity)",
+    "usage": "Token and cost report",
+    "micopen": "Hands-free: open mic, no key needed",
+    "micptt": "Back to push-to-talk",
+    "noask": "Auto-approve MILO's actions",
+    "ask": "Ask before acting again",
+}
+
+
+def _first_sentence(text):
+    text = text.split(" Usage:")[0].strip()
+    m = re.search(r"(?<=[.!?])\s", text)
+    return text[:m.start()] if m else text
+
+
+def _ptt_label():
+    try:
+        with open(os.path.join(BACKTALK_DIR, "backtalk.json")) as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+    key = str(cfg.get("ptt_key", "right_alt")).replace("_", " ").title()
+    return key, cfg.get("mic_mode", "ptt"), cfg.get("active_brain", "local")
+
+
+def load_reference():
+    ptt, mic_mode, brain = _ptt_label()
+    talk = f"Hold to talk, release to send" + (" (hands-free is on)" if mic_mode == "open" else "")
+    keys = [
+        (f"{ptt} (hold)", talk),
+        ("Enter", "Send the typed message"),
+        ("Ctrl+V / Shift+Ins", "Paste clipboard into the input line"),
+        ("Right-click", "Paste clipboard into the input line"),
+        ("Ctrl+C", "Copy the input line to the clipboard"),
+        ("Ctrl+U", "Clear the input line"),
+        ("Ctrl+W / Ctrl+Bksp", "Delete the previous word"),
+        ("Ctrl + / Ctrl -", "Zoom the console window"),
+        ("Ctrl+0", "Reset zoom"),
+        ("F1 / nameplate", "Open or close this plaque"),
+        ("Tab / ← →", "Next / previous plaque section"),
+        ("↑ ↓ / wheel", "Scroll the plaque"),
+        ("Esc", "Close the plaque, else exit the console"),
+        ("Ctrl+C (terminal)", "Hang up the voice line"),
+    ]
+
+    voice = []
+    try:
+        src = open(os.path.join(BACKTALK_DIR, "backtalk", "main.py")).read()
+        tree = ast.parse(src)
+        verbs = {}
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "CONSOLE_VERBS" for t in node.targets):
+                verbs = ast.literal_eval(node.value)
+        for verb, phrases in verbs.items():
+            if verb == "brain":
+                said = "switch brain to <name>"
+            else:
+                said = phrases[0]
+            voice.append((said, VOICE_HELP.get(verb, verb)))
+    except Exception as e:
+        voice.append(("(unavailable)", f"Could not read backtalk voice commands: {e}"))
+    voice.append(("set effort to <level>", "low, medium, high, xhigh or max"))
+    voice.append(("goodbye milo", "Hang up the voice line"))
+
+    # A row with desc None is drawn as a sub-heading.
+    builtin, shell = [], []
+    try:
+        src = open(os.path.join(BACKTALK_DIR, "backtalk", "brain.py")).read()
+        for m in re.finditer(r"^- ([a-z_]+)\(([^)]*)\): (.+)$", src, re.M):
+            builtin.append((m.group(1), _first_sentence(m.group(3))))
+    except Exception:
+        pass
+    try:
+        for name in sorted(os.listdir(TOOLS_DIR)):
+            path = os.path.join(TOOLS_DIR, name)
+            if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+                continue
+            # Same rule as backtalk's _load_milo_tools: a line starting with
+            # "# milo-tool:" within the first 5 lines.
+            with open(path, errors="replace") as f:
+                head = [next(f, "") for _ in range(5)]
+            desc = next((l.split(":", 1)[1].strip() for l in head
+                         if l.startswith("# milo-tool:")), "")
+            if desc:
+                shell.append((name, _first_sentence(desc)))
+    except Exception:
+        pass
+    tools = []
+    if builtin:
+        tools += [(f"BUILT-IN  \u00b7  {len(builtin)}", None)] + builtin
+    if shell:
+        tools += [(f"MILO-TOOLS  \u00b7  {len(shell)}  \u00b7  run any with --help", None)] + shell
+
+    return [("KEYS", keys), ("VOICE", voice), ("TOOLS", tools)], brain
+
+
+def _wrap(font, text, width):
+    lines, cur = [], ""
+    for word in text.split():
+        trial = f"{cur} {word}".strip()
+        if font.size(trial)[0] <= width or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+class ReferencePlaque:
+    """Brass plaque that drops down from under the nameplate."""
+    RECT = pygame.Rect(56, 126, 696, 500)   # ends above the input tray
+    TRIGGER = pygame.Rect(316, 66, 176, 56)  # the M.I.L.O. nameplate
+
+    def __init__(self):
+        self.f_head = pygame.font.SysFont("serif", 15, bold=True)
+        self.f_tab = pygame.font.SysFont("serif", 12, bold=True)
+        self.f_name = pygame.font.SysFont("monospace", 12, bold=True)
+        self.f_desc = pygame.font.SysFont("sans", 12)
+        self.f_hint = pygame.font.SysFont("monospace", 10, bold=True)
+        self.open = False
+        self.drop = 0.0          # 0 = retracted, 1 = fully down
+        self.section = 0
+        self.scroll = 0
+        self.sections, self.brain = [], "local"
+        self.tab_rects = []
+        self.body_h = 0
+        self.view_h = 0
+
+    def toggle(self):
+        self.open = not self.open
+        if self.open:
+            self.sections, self.brain = load_reference()
+            self.scroll = 0
+
+    def next_section(self, step=1):
+        self.section = (self.section + step) % max(1, len(self.sections))
+        self.scroll = 0
+
+    def scroll_by(self, dy):
+        self.scroll = max(0, min(max(0, self.body_h - self.view_h), self.scroll + dy))
+
+    def click(self, pos):
+        """Returns True if the click was consumed."""
+        if self.TRIGGER.collidepoint(pos):
+            self.toggle()
+            return True
+        if not self.open:
+            return False
+        for i, r in enumerate(self.tab_rects):
+            if r.collidepoint(pos):
+                self.section, self.scroll = i, 0
+                return True
+        return self.RECT.collidepoint(pos)
+
+    def draw(self, surface):
+        target = 1.0 if self.open else 0.0
+        self.drop += (target - self.drop) * 0.25
+        if abs(self.drop - target) < 0.01:
+            self.drop = target
+        if self.drop <= 0.0:
+            return
+
+        R = self.RECT
+        shown = int(R.height * (1 - (1 - self.drop) ** 2))
+        plate = pygame.Surface(R.size, pygame.SRCALPHA)
+        pygame.draw.rect(plate, (14, 10, 7, 255), plate.get_rect(), border_radius=8)
+        pygame.draw.rect(plate, BRASS, plate.get_rect(), width=2, border_radius=8)
+        pygame.draw.rect(plate, BRASS_DARK, plate.get_rect().inflate(-8, -8), width=1, border_radius=6)
+        for ix, iy in ((9, 9), (R.width - 10, 9), (9, R.height - 10), (R.width - 10, R.height - 10)):
+            pygame.draw.circle(plate, BRASS_DARK, (ix, iy), 4)
+            pygame.draw.circle(plate, BRASS, (ix - 1, iy - 1), 2)
+
+        head = self.f_head.render("REFERENCE PLAQUE", True, BRASS_LIGHT)
+        plate.blit(head, (22, 14))
+        brain = self.f_hint.render(f"BRAIN: {self.brain.upper()}", True, AMBER_GLOW)
+        plate.blit(brain, (R.width - 22 - brain.get_width(), 18))
+
+        # Section tabs
+        self.tab_rects = []
+        tx = 22
+        for i, (name, rows) in enumerate(self.sections):
+            count = sum(1 for _, d in rows if d is not None)
+            label = self.f_tab.render(f"{name}  {count}", True,
+                                      BLACK if i == self.section else BRASS_LIGHT)
+            tr = pygame.Rect(tx, 40, label.get_width() + 22, 22)
+            if i == self.section:
+                pygame.draw.rect(plate, BRASS, tr, border_radius=4)
+            else:
+                pygame.draw.rect(plate, BRASS_DARK, tr, width=1, border_radius=4)
+            plate.blit(label, (tr.x + 11, tr.y + 4))
+            self.tab_rects.append(tr.move(R.x, R.y))
+            tx = tr.right + 8
+        pygame.draw.line(plate, BRASS_DARK, (18, 68), (R.width - 18, 68))
+
+        # Scrollable rows
+        body = pygame.Rect(22, 76, R.width - 44, R.height - 104)
+        self.view_h = body.height
+        rows = self.sections[self.section][1] if self.sections else []
+        name_w = min(300, max([self.f_name.size(n)[0] for n, d in rows if d is not None] or [0]) + 16)
+        desc_w = body.width - name_w
+        clip = plate.get_clip()
+        plate.set_clip(body)
+        y = body.y - self.scroll
+        stripe = 0
+        for name, desc in rows:
+            if desc is None:
+                y += 4 if y > body.y - self.scroll else 0
+                plate.blit(self.f_tab.render(name, True, BRASS_LIGHT), (body.x, y + 2))
+                pygame.draw.line(plate, BRASS_DARK, (body.x, y + 19), (body.right, y + 19))
+                y += 24
+                stripe = 0
+                continue
+            lines = _wrap(self.f_desc, desc, desc_w)
+            if len(lines) > 2:
+                lines = lines[:2]
+                lines[1] = lines[1].rstrip(".,;: ") + "\u2026"
+            row_h = 6 + 16 * max(1, len(lines))
+            stripe += 1
+            if stripe % 2 == 1:
+                pygame.draw.rect(plate, (30, 22, 14, 255),
+                                 (body.x - 4, y - 2, body.width + 8, row_h), border_radius=3)
+            plate.blit(self.f_name.render(name, True, NIXIE_GLOW), (body.x, y + 1))
+            for j, line in enumerate(lines):
+                plate.blit(self.f_desc.render(line, True, TEXT_COLOR),
+                           (body.x + name_w, y + 1 + 16 * j))
+            y += row_h
+        self.body_h = y + self.scroll - body.y
+        plate.set_clip(clip)
+
+        if self.body_h > self.view_h:
+            track = pygame.Rect(R.width - 14, body.y, 4, body.height)
+            pygame.draw.rect(plate, (40, 30, 20), track, border_radius=2)
+            th = max(20, int(track.height * self.view_h / self.body_h))
+            ty = track.y + int((track.height - th) * self.scroll / (self.body_h - self.view_h))
+            pygame.draw.rect(plate, BRASS, (track.x, ty, 4, th), border_radius=2)
+
+        hint = self.f_hint.render(
+            "[Tab] Section  [↑↓/Wheel] Scroll  [F1/Esc] Close  ·  Phrases work spoken or typed",
+            True, MUTED_BRASS)
+        plate.blit(hint, ((R.width - hint.get_width()) // 2, R.height - 22))
+
+        surface.blit(plate, (R.x, R.y),
+                     pygame.Rect(0, R.height - shown, R.width, shown))
 
 
 # -----------------------------------------------------------------------------
@@ -627,6 +895,13 @@ def main():
         TokenPlate(658, 508, "milo", plate_fonts),
     ]
     token_poller = TokenPoller()
+    plaque = ReferencePlaque()
+    # Window -> canvas mapping (offset x/y, scale x/y), updated every frame.
+    view = (0, 0, 1.0, 1.0)
+
+    def to_canvas(pos):
+        ox, oy, sx, sy = view
+        return (int((pos[0] - ox) / sx), int((pos[1] - oy) / sy))
 
     # Pre-render Nameplate
     t_surf_sh = font_plate.render("M.I.L.O.", True, (180, 150, 80))
@@ -650,8 +925,13 @@ def main():
                 running = False
             elif event.type == pygame.VIDEORESIZE:
                 screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+            elif event.type == pygame.MOUSEWHEEL:
+                if plaque.open:
+                    plaque.scroll_by(-event.y * 32)
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 3:  # Right-click pastes clipboard text into input box
+                if event.button == 1:
+                    plaque.click(to_canvas(event.pos))
+                elif event.button == 3:  # Right-click pastes clipboard text into input box
                     clip = get_clipboard_text()
                     if clip:
                         clean = " ".join(clip.split())
@@ -663,8 +943,22 @@ def main():
                 ctrl_pressed = bool(event.mod & pygame.KMOD_CTRL)
                 shift_pressed = bool(event.mod & pygame.KMOD_SHIFT)
 
+                # Reference plaque: F1 toggles; while open it owns
+                # Tab/arrows/paging/Esc, everything else still types.
+                if event.key == pygame.K_F1:
+                    plaque.toggle()
+                elif plaque.open and event.key == pygame.K_ESCAPE:
+                    plaque.toggle()
+                elif plaque.open and event.key in (pygame.K_TAB, pygame.K_RIGHT):
+                    plaque.next_section(-1 if (shift_pressed and event.key == pygame.K_TAB) else 1)
+                elif plaque.open and event.key == pygame.K_LEFT:
+                    plaque.next_section(-1)
+                elif plaque.open and event.key in (pygame.K_UP, pygame.K_DOWN):
+                    plaque.scroll_by(-32 if event.key == pygame.K_UP else 32)
+                elif plaque.open and event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+                    plaque.scroll_by(-300 if event.key == pygame.K_PAGEUP else 300)
                 # Paste from clipboard (Ctrl+V or Shift+Insert)
-                if (ctrl_pressed and event.key == pygame.K_v) or (shift_pressed and event.key == pygame.K_INSERT):
+                elif (ctrl_pressed and event.key == pygame.K_v) or (shift_pressed and event.key == pygame.K_INSERT):
                     clip = get_clipboard_text()
                     if clip:
                         clean = " ".join(clip.split())
@@ -765,6 +1059,9 @@ def main():
         # --- Draw Centered Steampunk Clock (Porthole Bezel: 234px) ---
         clock_widget.draw(canvas)
 
+        # --- Reference Plaque (drops over the upper bays, above the tray) ---
+        plaque.draw(canvas)
+
         # ---------------------------------------------------------------------
         # Steampunk Text Input Box (Recessed Lower Tray)
         # ---------------------------------------------------------------------
@@ -829,20 +1126,22 @@ def main():
         footer_y = 748
         if last_sent_text:
             display_msg = last_sent_text if len(last_sent_text) <= 38 else last_sent_text[:35] + "..."
-            last_surf = font_small.render(f"Sent: \"{display_msg}\" | [Ctrl+V] Paste | [Right-Alt] Push-To-Talk | [Esc] Exit", True, (160, 130, 85))
+            last_surf = font_small.render(f"Sent: \"{display_msg}\" | [Right-Alt] Talk | [F1] Reference | [Esc] Exit", True, (160, 130, 85))
             canvas.blit(last_surf, ((WIDTH - last_surf.get_width()) // 2, footer_y))
         else:
-            hint = font_small.render("[Enter] Send Message | [Ctrl+V] Paste | [Right-Alt] Push-To-Talk | [Ctrl +/-] Zoom | [Esc] Exit", True, (140, 115, 80))
+            hint = font_small.render("[Enter] Send | [Ctrl+V] Paste | [Right-Alt] Talk | [F1] Reference | [Ctrl +/-] Zoom | [Esc] Exit", True, (140, 115, 80))
             canvas.blit(hint, ((WIDTH - hint.get_width()) // 2, footer_y))
 
         # --- Smoothscale Virtual Canvas to Fill Window Completely ---
         cur_w, cur_h = screen.get_size()
         if cur_w == WIDTH and cur_h == HEIGHT:
+            view = (0, 0, 1.0, 1.0)
             screen.blit(canvas, (0, 0))
         else:
             aspect_diff = abs((cur_w / cur_h) - (WIDTH / HEIGHT))
             if aspect_diff < 0.05:
                 # Aspect ratio is close to native -> stretch to 100% fill window with zero black bars
+                view = (0, 0, cur_w / WIDTH, cur_h / HEIGHT)
                 scaled = pygame.transform.smoothscale(canvas, (cur_w, cur_h))
                 screen.blit(scaled, (0, 0))
             else:
@@ -851,6 +1150,7 @@ def main():
                 sw = int(WIDTH * fit_scale)
                 sh = int(HEIGHT * fit_scale)
                 scaled = pygame.transform.smoothscale(canvas, (sw, sh))
+                view = ((cur_w - sw) // 2, (cur_h - sh) // 2, fit_scale, fit_scale)
                 screen.fill(BLACK)
                 screen.blit(scaled, ((cur_w - sw) // 2, (cur_h - sh) // 2))
 
