@@ -827,7 +827,7 @@ def main():
         bg_texture = pygame.image.load(bg_path).convert()
         bg_texture = pygame.transform.scale(bg_texture, (WIDTH, HEIGHT))
 
-    # Load Title Plate (ASTRA Flight Director Brass Plate)
+    # Load Title Plate (ASTRA brass plate image)
     title_plate_path = os.path.join(BASE_DIR, "astra_plate.png")
     title_plate = None
     if os.path.exists(title_plate_path):
@@ -906,8 +906,15 @@ def main():
     # Pre-render Nameplate
     t_surf_sh = font_plate.render("A.S.T.R.A.", True, (180, 150, 80))
     t_surf = font_plate.render("A.S.T.R.A.", True, (40, 26, 12))
-    s_surf_sh = font_sub.render("FLIGHT DIRECTOR", True, (180, 150, 80))
-    s_surf = font_sub.render("FLIGHT DIRECTOR", True, (50, 32, 16))
+    # The acronym spelled out, sized to fit between the plate's rivets (~150 px).
+    sub_lines = ("AUTONOMOUS SYSTEMS", "& TELEMETRY", "ROBOTICS ASSISTANT")
+    for size in range(10, 6, -1):
+        font_sub = pygame.font.SysFont("serif", size, bold=True)
+        if max(font_sub.size(l)[0] for l in sub_lines) <= 150:
+            break
+    sub_surfs = [(font_sub.render(l, True, (180, 150, 80)), font_sub.render(l, True, (50, 32, 16)))
+                 for l in sub_lines]
+    sub_step = font_sub.get_linesize() - 2
 
     # State Variables
     input_text = ""
@@ -1031,10 +1038,12 @@ def main():
         canvas.blit(box_bg, (0, 0))
 
         # --- Draw Engraved Nameplate Text ---
-        canvas.blit(t_surf_sh, (404 - t_surf.get_width() // 2 + 1, 75 + 1))
-        canvas.blit(t_surf, (404 - t_surf.get_width() // 2, 75))
-        canvas.blit(s_surf_sh, (404 - s_surf.get_width() // 2 + 1, 95 + 1))
-        canvas.blit(s_surf, (404 - s_surf.get_width() // 2, 95))
+        canvas.blit(t_surf_sh, (404 - t_surf.get_width() // 2 + 1, 71 + 1))
+        canvas.blit(t_surf, (404 - t_surf.get_width() // 2, 71))
+        for i, (sh, sf) in enumerate(sub_surfs):
+            y = 90 + i * sub_step
+            canvas.blit(sh, (404 - sf.get_width() // 2 + 1, y + 1))
+            canvas.blit(sf, (404 - sf.get_width() // 2, y))
 
         # --- Draw Realistic Nixie Tubes (Centered in Upper Bay at Y=164) ---
         for i, tube in enumerate(tubes):

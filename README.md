@@ -8,7 +8,7 @@ A Victorian industrial / Steampunk operational console for **A.S.T.R.A.** (**A**
 
 ```
 +-------------------------------------------------------------+
-|               [ A.S.T.R.A. FLIGHT DIRECTOR ]                  |  <- Y: 16..75
+|               [ A.S.T.R.A. + full name ]                     |  <- Y: 16..75
 |  +-------------------------------------------------------+  |
 |  | [0]  [3]  [8]  [5]  [8]  [7]  [3]  [1]                |  |  <- Y: 88..208
 |  |     (Rustic Weathered Brass/Cast Iron Backplate)      |  |
@@ -55,7 +55,7 @@ A Victorian industrial / Steampunk operational console for **A.S.T.R.A.** (**A**
   - **Center Hub**: Multi-tier polished brass cap with specular highlight.
 
 ### 3. Equipment Placard (`astra_plate.png`)
-- High-detail brass placard engraved *"A.S.T.R.A. FLIGHT DIRECTOR"*.
+- High-detail brass placard engraved *"A.S.T.R.A."* over *"Autonomous Systems & Telemetry Robotics Assistant"*.
 - Scaled to $300 \times 59\text{px}$ and centered at $Y = 16$.
 
 ### 4. Corner Voice Indicator Jewel Lamp
