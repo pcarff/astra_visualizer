@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MILO Steampunk Optical Viewfinder HUD (Qt6 / PyQt6)
-Machine Intelligence Liaison Officer — Real-Time Visual Telemetry & Camera Reticle.
+ASTRA Steampunk Optical Viewfinder HUD (Qt6 / PyQt6)
+Autonomous Systems & Telemetry Robotics Assistant — Real-Time Visual Telemetry & Camera Reticle.
 
 Displays live/captured frames from the Logitech C925e optical sensor with
 Victorian brass housing, corner rivets, amber telemetry crosshairs, and one-click capture.
@@ -55,7 +55,7 @@ except ImportError:
         return font
 
 SIGNALS_DIR = "/dev/shm/signals"
-PIC_DIR = "/workspaces_nvme/milo_pic"
+PIC_DIR = "/workspaces_nvme/astra_pic"
 
 
 class ViewfinderWidget(QWidget):
@@ -189,11 +189,11 @@ class ViewfinderWidget(QWidget):
 
 
 class SteampunkViewfinderHUD(QMainWindow):
-    """Master HUD Window for MILO's Optical Eye Viewfinder."""
+    """Master HUD Window for ASTRA's Optical Eye Viewfinder."""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("M.I.L.O. — Optical Telemetry & Viewfinder")
+        self.setWindowTitle("A.S.T.R.A. — Optical Telemetry & Viewfinder")
         self.resize(780, 620)
         self.setStyleSheet(f"background-color: {COLOR_BG_DARK}; color: {COLOR_TEXT_PRIMARY};")
 
@@ -221,7 +221,7 @@ class SteampunkViewfinderHUD(QMainWindow):
         title_layout = QHBoxLayout(title_plate)
         title_layout.setContentsMargins(12, 4, 12, 4)
 
-        title_label = QLabel("M.I.L.O. OPTICAL TELEMETRY VIEWPORT")
+        title_label = QLabel("A.S.T.R.A. OPTICAL TELEMETRY VIEWPORT")
         title_label.setFont(get_steampunk_font(13, bold=True, family="serif"))
         title_label.setStyleSheet(f"color: {COLOR_GOLD}; letter-spacing: 1px;")
 
@@ -256,7 +256,7 @@ class SteampunkViewfinderHUD(QMainWindow):
         self.telemetry_line1.setFont(get_steampunk_font(10, bold=True, family="mono"))
         self.telemetry_line1.setStyleSheet(f"color: {COLOR_NIXIE_AMBER_BRIGHT};")
 
-        self.telemetry_line2 = QLabel("LAST SNAPSHOT: NONE  |  PATH: /workspaces_nvme/milo_pic")
+        self.telemetry_line2 = QLabel("LAST SNAPSHOT: NONE  |  PATH: /workspaces_nvme/astra_pic")
         self.telemetry_line2.setFont(get_steampunk_font(9, bold=False, family="mono"))
         self.telemetry_line2.setStyleSheet(f"color: {COLOR_TEXT_MUTED};")
 

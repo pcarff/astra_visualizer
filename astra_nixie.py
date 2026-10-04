@@ -384,14 +384,14 @@ class AnalogMeter:
 
 
 # -----------------------------------------------------------------------------
-# Token Status Plates (Claude / Gemini / AGY / MILO) in the side bays
+# Token Status Plates (Claude / Gemini / AGY / ASTRA) in the side bays
 # -----------------------------------------------------------------------------
-TOKEN_CMD = os.path.join(os.path.dirname(BASE_DIR), "milo-tools", "milo-tokens")
+TOKEN_CMD = os.path.join(os.path.dirname(BASE_DIR), "astra-tools", "astra-tokens")
 TOKEN_REFRESH_S = 60
 
 
 class TokenPoller:
-    """Runs milo-tokens in a background thread every minute; the draw loop
+    """Runs astra-tokens in a background thread every minute; the draw loop
     only ever reads the last parsed result."""
 
     def __init__(self):
@@ -447,10 +447,10 @@ def token_plate_rows(status):
     a = status.get("agy", {})
     rows["agy"] = ("AGY", "ANTIGRAVITY", _human(a.get("today_total")),
                    f"7D {_human(a.get('week_total'))}" + ("" if a.get("last_used") else " · IDLE"), None)
-    m = status.get("milo", {})
+    m = status.get("astra", {})
     ctx = m.get("context") or {}
     ctx_pct = 100.0 * ctx["used"] / ctx["max"] if ctx.get("max") else None
-    rows["milo"] = ("MILO", f"CTX {ctx_pct:.0f}%" if ctx_pct is not None else "OFFLINE",
+    rows["astra"] = ("ASTRA", f"CTX {ctx_pct:.0f}%" if ctx_pct is not None else "OFFLINE",
                     _human(m.get("today_total")),
                     f"7D {_human(m.get('week_total'))} · {_human(ctx.get('used'))} CTX", ctx_pct)
     return rows
@@ -504,12 +504,12 @@ class TokenPlate:
 
 # -----------------------------------------------------------------------------
 # Reference Plaque (F1 or click the nameplate): keys, voice commands, tools.
-# Rebuilt from backtalk's own config/source on every open, so a new milo-tool
+# Rebuilt from backtalk's own config/source on every open, so a new astra-tool
 # or voice phrase shows up without touching this file.
 # -----------------------------------------------------------------------------
 AGENT_ROOT = os.path.dirname(BASE_DIR)
 BACKTALK_DIR = os.path.join(AGENT_ROOT, "backtalk")
-TOOLS_DIR = os.path.join(AGENT_ROOT, "milo-tools")
+TOOLS_DIR = os.path.join(AGENT_ROOT, "astra-tools")
 
 VOICE_HELP = {
     "clear": "Wipe the conversation and start fresh",
@@ -520,7 +520,7 @@ VOICE_HELP = {
     "usage": "Token and cost report",
     "micopen": "Hands-free: open mic, no key needed",
     "micptt": "Back to push-to-talk",
-    "noask": "Auto-approve MILO's actions",
+    "noask": "Auto-approve ASTRA's actions",
     "ask": "Ask before acting again",
 }
 
@@ -579,7 +579,7 @@ def load_reference():
     except Exception as e:
         voice.append(("(unavailable)", f"Could not read backtalk voice commands: {e}"))
     voice.append(("set effort to <level>", "low, medium, high, xhigh or max"))
-    voice.append(("goodbye milo", "Hang up the voice line"))
+    voice.append(("goodbye astra", "Hang up the voice line"))
 
     # A row with desc None is drawn as a sub-heading.
     builtin, shell = [], []
@@ -594,12 +594,12 @@ def load_reference():
             path = os.path.join(TOOLS_DIR, name)
             if not (os.path.isfile(path) and os.access(path, os.X_OK)):
                 continue
-            # Same rule as backtalk's _load_milo_tools: a line starting with
-            # "# milo-tool:" within the first 5 lines.
+            # Same rule as backtalk's _load_astra_tools: a line starting with
+            # "# astra-tool:" within the first 5 lines.
             with open(path, errors="replace") as f:
                 head = [next(f, "") for _ in range(5)]
             desc = next((l.split(":", 1)[1].strip() for l in head
-                         if l.startswith("# milo-tool:")), "")
+                         if l.startswith("# astra-tool:")), "")
             if desc:
                 shell.append((name, _first_sentence(desc)))
     except Exception:
@@ -608,7 +608,7 @@ def load_reference():
     if builtin:
         tools += [(f"BUILT-IN  \u00b7  {len(builtin)}", None)] + builtin
     if shell:
-        tools += [(f"MILO-TOOLS  \u00b7  {len(shell)}  \u00b7  run any with --help", None)] + shell
+        tools += [(f"ASTRA-TOOLS  \u00b7  {len(shell)}  \u00b7  run any with --help", None)] + shell
 
     return [("KEYS", keys), ("VOICE", voice), ("TOOLS", tools)], brain
 
@@ -630,7 +630,7 @@ def _wrap(font, text, width):
 class ReferencePlaque:
     """Brass plaque that drops down from under the nameplate."""
     RECT = pygame.Rect(56, 126, 696, 500)   # ends above the input tray
-    TRIGGER = pygame.Rect(316, 66, 176, 56)  # the M.I.L.O. nameplate
+    TRIGGER = pygame.Rect(316, 66, 176, 56)  # the A.S.T.R.A. nameplate
 
     def __init__(self):
         self.f_head = pygame.font.SysFont("serif", 15, bold=True)
@@ -780,7 +780,7 @@ def main():
 
     # Determine default scale factor based on screen height (e.g. 4K 3840x2160)
     display_info = pygame.display.Info()
-    env_scale = os.environ.get("MILO_SCALE")
+    env_scale = os.environ.get("ASTRA_SCALE")
     if env_scale:
         try:
             scale_factor = float(env_scale)
@@ -812,7 +812,7 @@ def main():
         box_bg = pygame.Surface((WIDTH, HEIGHT))
         box_bg.fill(BLACK)
 
-    pygame.display.set_caption("MILO — Steampunk Telemetry & Voice Console")
+    pygame.display.set_caption("ASTRA — Steampunk Telemetry & Voice Console")
     clock = pygame.time.Clock()
 
     # Load Background (Dark Walnut)
@@ -827,8 +827,8 @@ def main():
         bg_texture = pygame.image.load(bg_path).convert()
         bg_texture = pygame.transform.scale(bg_texture, (WIDTH, HEIGHT))
 
-    # Load Title Plate (MILO Flight Director Brass Plate)
-    title_plate_path = os.path.join(BASE_DIR, "milo_plate.png")
+    # Load Title Plate (ASTRA Flight Director Brass Plate)
+    title_plate_path = os.path.join(BASE_DIR, "astra_plate.png")
     title_plate = None
     if os.path.exists(title_plate_path):
         raw_plate = pygame.image.load(title_plate_path).convert_alpha()
@@ -892,7 +892,7 @@ def main():
         TokenPlate(152, 294, "claude", plate_fonts),
         TokenPlate(152, 508, "gemini", plate_fonts),
         TokenPlate(658, 294, "agy", plate_fonts),
-        TokenPlate(658, 508, "milo", plate_fonts),
+        TokenPlate(658, 508, "astra", plate_fonts),
     ]
     token_poller = TokenPoller()
     plaque = ReferencePlaque()
@@ -904,8 +904,8 @@ def main():
         return (int((pos[0] - ox) / sx), int((pos[1] - oy) / sy))
 
     # Pre-render Nameplate
-    t_surf_sh = font_plate.render("M.I.L.O.", True, (180, 150, 80))
-    t_surf = font_plate.render("M.I.L.O.", True, (40, 26, 12))
+    t_surf_sh = font_plate.render("A.S.T.R.A.", True, (180, 150, 80))
+    t_surf = font_plate.render("A.S.T.R.A.", True, (40, 26, 12))
     s_surf_sh = font_sub.render("FLIGHT DIRECTOR", True, (180, 150, 80))
     s_surf = font_sub.render("FLIGHT DIRECTOR", True, (50, 32, 16))
 
@@ -1015,14 +1015,14 @@ def main():
 
         # ---------------------------------------------------------------------
         # Nixie Tube Behavior:
-        # - When MILO is working (thinking): numbers flicker rapidly
-        # - In all other states (idle, listening, or MILO speaking): numbers stay FROZEN
+        # - When ASTRA is working (thinking): numbers flicker rapidly
+        # - In all other states (idle, listening, or ASTRA speaking): numbers stay FROZEN
         # ---------------------------------------------------------------------
         if is_working:
             for tube in tubes:
                 if random.random() < 0.28:  # Rapid telemetry calculation flicker
                     tube.value = str(random.randint(0, 9))
-        # When waiting for user or when MILO is speaking: DO NOTHING -> NUMBERS STAY FROZEN
+        # When waiting for user or when ASTRA is speaking: DO NOTHING -> NUMBERS STAY FROZEN
 
         pulse_phase += 0.08
         glow_pulse = (math.sin(pulse_phase) + 1.0) * 0.5
@@ -1103,7 +1103,7 @@ def main():
             if cursor_visible:
                 pygame.draw.line(canvas, BRASS_LIGHT, (cursor_x, text_y + 1), (cursor_x, text_y + 17), 2)
         else:
-            placeholder = font_input.render("Type a message to MILO and press Enter...", True, MUTED_BRASS)
+            placeholder = font_input.render("Type a message to ASTRA and press Enter...", True, MUTED_BRASS)
             canvas.blit(placeholder, (text_x, text_y))
             if cursor_visible:
                 pygame.draw.line(canvas, BRASS_LIGHT, (text_x, text_y + 1), (text_x, text_y + 17), 2)

@@ -1,3 +1,3 @@
 #!/bin/bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "$DIR/venv/bin/python" "$DIR/milo_nixie.py"
+exec "$DIR/venv/bin/python" "$DIR/astra_nixie.py"

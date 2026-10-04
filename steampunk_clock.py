@@ -249,6 +249,6 @@ if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
     window = SteampunkClock(size=400, smooth=True)
-    window.setWindowTitle("MILO Steampunk Chronometer (Qt6)")
+    window.setWindowTitle("ASTRA Steampunk Chronometer (Qt6)")
     window.show()
     sys.exit(app.exec())
